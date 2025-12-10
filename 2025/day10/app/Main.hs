@@ -87,21 +87,18 @@ updateVisited = foldl setAt
 
 leastNumButtons' :: Int -> [Button] -> [Light] -> [Bool] -> [Light] -> Int
 leastNumButtons' 0 buttons' target visited state = 0
-leastNumButtons' depth buttons' target visited state =
-    if target == state then
-        0
-    else
-        case childrenResults of 
-            [] -> 0
-            xs -> 1 + minimum xs
-    where 
-        nextStates = map (toggleButton state) buttons'
-        nextStatesNoDups = filter ((visited !!) . lightsToInt) nextStates
-        nextStatesInts = map lightsToInt nextStatesNoDups -- List of ints corresponding to states [00101, 11001, 01111011, ...]
-        newVisited = updateVisited visited nextStatesInts
+leastNumButtons' depth buttons' target visited state
+ | target == state = 0
+ | visited !! (lightsToInt state) = 0
+ | otherwise = 1 + minimum childrenResults
+    where
+      nextStates = map (toggleButton state) buttons'
+      -- nextStatesNoDups = filter ((visited !!) . lightsToInt) nextStates
+      nextStatesInts = map lightsToInt nextStates -- List of ints corresponding to states [00101, 11001, 01111011, ...]
+      newVisited = updateVisited visited nextStatesInts
 
-        recursive = leastNumButtons' (depth - 1) buttons' target newVisited 
-        childrenResults = (map recursive nextStatesNoDups)
+      recursive = leastNumButtons' (depth - 1) buttons' target newVisited
+      childrenResults = (map recursive nextStates)
 
 
 removeDups :: Eq a => [a] -> [a]
