@@ -7,61 +7,74 @@ import Data.Maybe
 import Data.Char
 
 import Debug.Trace
+import qualified GHC.ForeignPtr as Data
 
 type Vertex = Int
-type Node = (Vertex, [Vertex])
+type Node = (Vertex, ([Vertex], Maybe Int))
 
 -- Adjacency list
-type Graph = Map Vertex [Vertex]
-
--- parseEdge :: [String] -> Edge
--- parseEdge (src : outEdges) = Edge {src = src, nbrs = }
+type Graph = Map Vertex ([Vertex], Maybe Int)
 
 neighbors :: Graph -> Vertex -> [Vertex]
-neighbors g v = Data.Maybe.fromMaybe undefined (TMap.lookup v g)
+neighbors g v = nbrs
+    where
+        (nbrs, _) = Data.Maybe.fromMaybe undefined (TMap.lookup v g)
 
 trimLast :: String -> String
 trimLast s = take (length s - 1) s
 
 parseVertex :: [String] -> Node
-parseVertex (vertex : neighbors) = (labelToInt (trimLast vertex), map labelToInt neighbors)
+parseVertex (vertex : nbrs) = (labelToInt (trimLast vertex), (map labelToInt nbrs, Nothing))
 parseVertex [] = undefined
 
--- buildGraph :: [String] -> Graph
--- buildGraph labels = ([],[])
 
--- buildGraph' :: Graph -> [String] -> Graph
--- buildGraph' (vertices, edges) (lbl : labels) 
---  | elem lbl (map label vertices) = buildGraph' (vertices, edges) (labels) -- vertices already contains entry for lbl
---  | othe
-
--- sumMaybe :: [Maybe Int] -> Maybe Int
--- sumMaybe [] = Nothing
--- sumMaybe xs = Just (aux xs)
---     where 
---         aux [] = 0
---         aux ys = sum $ map (\case {Just x -> x; Nothing -> 0}) ys
-
-countPaths :: Graph -> Set Int -> Vertex -> Vertex -> Int
-countPaths g visited target source
-    | source `elem` visited = 0
-    | source == target = 
-        if labelToInt "dac" `Set.member` visited && labelToInt "fft" `Set.member` visited then
-            1
-        else
-            0
-    -- | target `elem` nbrs = recursive -- Target is a neighbor of source
-    --     >>= (\x -> return (x+1))
-    | otherwise = recursive
+setNumPathsFrom :: Graph -> Vertex -> Int -> Graph
+setNumPathsFrom g v numPaths = adjust aux v g
     where
-        recursive = sum $ map (countPaths g (Set.insert source visited) target) nbrs
-        nbrs = neighbors g source
+        aux (vs, _) = (vs, Just numPaths)
+
+addNumPathsFrom :: Graph -> Vertex -> Int -> Graph
+addNumPathsFrom g v addCount = adjust aux v g
+    where
+        aux (vs, Nothing) = (vs, Just addCount)
+        aux (vs, Just pathCount) = (vs, Just (pathCount + addCount))
+
+foundPathFrom :: Graph -> Vertex -> Graph
+foundPathFrom g v = addNumPathsFrom g v 1
+
+getNumPaths :: Graph -> Vertex -> Maybe Int
+getNumPaths g source = snd $ Data.Maybe.fromMaybe undefined (TMap.lookup source g)
+
+countPaths :: Graph -> Vertex -> Vertex -> Maybe Int
+countPaths g target source = snd $ Data.Maybe.fromMaybe undefined (TMap.lookup source (countPaths' g target source))
+
+
+-- NOTE: I am pretty there are no cycles in the graph, so assuming this
+countPaths' :: Graph -> Vertex -> Vertex -> Graph
+countPaths' g target source
+    | target == source = setNumPathsFrom g source 1
+    | isJust cachedResult = g
+    | otherwise = setNumPathsFrom newGraph source numPaths
+    where
+        cachedResult = getNumPaths g source
+        (newGraph, numPaths) = sumNeighbors g target (neighbors g source)
+
+
+sumNeighbors :: Graph -> Vertex -> [Vertex] -> (Graph, Int)
+sumNeighbors g target [] = (g, 0)
+sumNeighbors g target (node : siblings) = (newNewGraph, numPaths + numPathsRest)
+    where
+        newGraph = countPaths' g target node
+        numPaths = fromMaybe 0 $ getNumPaths newGraph node 
+        (newNewGraph, numPathsRest) = sumNeighbors newGraph target siblings
+
+
 
 labelToInt :: String -> Int
-labelToInt (a : b : c : []) = (ord a - ord 'a') + 26 * (ord b - ord 'a') + (26^2) * (ord c - ord 'a')
+labelToInt [a, b, c] = (ord a - ord 'a') + 26 * (ord b - ord 'a') + (26^2) * (ord c - ord 'a')
 labelToInt _ = undefined
 
-main :: IO (Int)
+main :: IO ()
 main = do
     -- args <- getArgs
     -- print args
@@ -70,11 +83,19 @@ main = do
     let linesVertices = map words $ lines contents
 
     let vertices = map parseVertex linesVertices
-    let graph = TMap.fromList ((labelToInt "out", []): vertices)
-    -- print vertices
-    print graph
-    -- print $ TMap.lookup "you" graph
-    let result = countPaths graph Set.empty (labelToInt "out") (labelToInt "svr")
+    let graph = TMap.fromList ((labelToInt "out", ([], Nothing)): vertices)
+
+    -- This only works because there are no cycles and all paths go from fft to dac
+    -- So technically this solution is not very generic
+    -- Could be solved by booleans on paths tracking whether dac and fft have been found
+    let (Just svrToFft) = countPaths graph (labelToInt "fft") (labelToInt "svr")
+    let (Just fftToDac) = countPaths graph (labelToInt "dac") (labelToInt "fft")
+    let (Just dacToOut) =  countPaths graph (labelToInt "out") (labelToInt "dac")
+    -- print svrToFft
+    -- print fftToDac
+    -- print dacToOut
+
+    let result = svrToFft * fftToDac * dacToOut
     print result
-    return result
+    return ()
 
